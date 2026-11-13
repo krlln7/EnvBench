@@ -1,0 +1,15 @@
+id: s4-docker
+adapter: docker
+state:
+  logical_id: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  kind: empty
+  locator: ""
+config:
+  db_version: "17"
+  resources: {cpu: 2, ram_gb: 4}
+  mode: cold
+  isolation: shared_kernel
+  timeout_s: 120
+s4:
+  mutation_sql: "CREATE TABLE _bench_marker(id int); INSERT INTO _bench_marker VALUES (1);"
+repeats: 1
