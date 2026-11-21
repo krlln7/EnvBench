@@ -25,6 +25,7 @@ type ConnectionConfig struct {
 	host string
 }
 
+// infra
 type CreateConfig struct {
 	DBVersion  string
 	Resources  ResourceLimits   // CPU, RAM, disk

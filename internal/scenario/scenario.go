@@ -1,18 +1,25 @@
 package scenario
 
 import (
+	"envbench/internal/adapter"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 type Scenario struct {
-	ID      string `yaml:"id"`
-	Adapter string `yaml:"adapter"`
-	State   State  `yaml:"state"`
-	Config  Config `yaml:"config"`
-	S4      *S4    `yaml:"s4,omitempty"`
-	Repeat  int    `yaml:"repeats"`
+	ID      string       `yaml:"id"`
+	Adapter string       `yaml:"adapter"`
+	State   State        `yaml:"state"`
+	Config  Config       `yaml:"config"`
+	Run     ScenarioSpec `yaml:"scenario"`
+	Repeat  int          `yaml:"repeats"`
+}
+
+type ScenarioSpec struct {
+	Kind   string    `yaml:"name"` // s1, s2, ...
+	Params yaml.Node `yaml:"params"`
 }
 
 type State struct {
@@ -45,4 +52,24 @@ func Load(path string) (Scenario, error) {
 		s.Repeat = 1
 	}
 	return s, nil
+}
+
+func (s Scenario) ToEnvSpec() adapter.EnvSpec {
+	return adapter.EnvSpec{
+		State: adapter.StateRef{
+			ID:      s.State.ID,
+			Kind:    s.State.Kind,
+			Locator: s.State.Locator,
+		},
+		Config: adapter.CreateConfig{
+			DBVersion: s.Config.DBVersion,
+			Resources: adapter.ResourceLimits{
+				CPU: s.Config.Resources.CPU,
+				RAM: s.Config.Resources.RAMGB,
+			},
+			Isolation: s.Config.Isolation,
+			Mode:      s.Config.Mode,
+			Timeout:   time.Duration(s.Config.TimeoutS) * time.Second,
+		},
+	}
 }

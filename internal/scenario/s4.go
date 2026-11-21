@@ -5,7 +5,10 @@ import (
 	"fmt"
 
 	"envbench/internal/adapter"
-	"envbench/internal/runner"
+	"envbench/internal/engine"
+	"envbench/internal/result"
+
+	"gopkg.in/yaml.v3"
 )
 
 type S4 struct {
@@ -20,15 +23,35 @@ type S4Result struct {
 	RefReport   string
 }
 
+type s4Params struct {
+	MutationSQL string `yaml:"mutation_sql"`
+}
+
+func init() {
+	Register("s4", runS4)
+}
+
 // 1) Create E1, E2
 // 2) Check isolation property (equality to etalon)
 // 3) Mutate E1
 // 4) Check E2 (not changed)
 // 5) Clear
-func RunS4(ctx context.Context, r *runner.Runner, spec adapter.EnvSpec,
-	referenceDSN string, mutationSQL string) (S4Result, error) {
+func runS4(ctx context.Context, r *engine.Engine, spec adapter.EnvSpec, params yaml.Node) (result.Result, error) {
+	var p s4Params
+	if err := params.Decode(&p); err != nil {
+		return result.Result{}, fmt.Errorf("s4 params: %w", err)
+	}
+	if p.MutationSQL == "" {
+		return result.Result{}, fmt.Errorf("s4: mutation_sql is required")
+	}
 
-	var res S4Result
+	res := result.Result{Checks: map[string]string{}}
+
+	eRef, _, err := r.Create(ctx, spec)
+	if err != nil {
+		return res, fmt.Errorf("create ref: %w", err)
+	}
+	defer r.Delete(ctx, eRef)
 
 	e1, _, err := r.Create(ctx, spec)
 	if err != nil {
@@ -42,33 +65,38 @@ func RunS4(ctx context.Context, r *runner.Runner, spec adapter.EnvSpec,
 	}
 	defer r.Delete(ctx, e2)
 
-	rep1, err := r.Check(ctx, e1, referenceDSN)
+	rep1, err := r.Check(ctx, e1, eRef.ConnectionString)
 	if err != nil {
-		return res, fmt.Errorf("check e1: %w", err)
+		return res, err
 	}
-	rep2, err := r.Check(ctx, e2, referenceDSN)
+	rep2, err := r.Check(ctx, e2, eRef.ConnectionString)
 	if err != nil {
-		return res, fmt.Errorf("check e2: %w", err)
+		return res, err
 	}
-	res.E1Report = rep1.Verdict
-	res.E2Report = rep2.Verdict
+	res.Checks["E1_pre"] = rep1.Verdict
+	res.Checks["E2_pre"] = rep2.Verdict
 
-	if err := r.ExecSQL(ctx, e1.ConnectionString, mutationSQL); err != nil {
+	if err := r.ExecSQL(ctx, e1.ConnectionString, p.MutationSQL); err != nil {
 		return res, fmt.Errorf("mutation: %w", err)
 	}
 
-	rep2After, err := r.Check(ctx, e2, referenceDSN)
+	rep2After, err := r.Check(ctx, e2, eRef.ConnectionString)
 	if err != nil {
-		return res, fmt.Errorf("check e2 after: %w", err)
+		return res, err
 	}
-	res.IsolationOK = rep2After.Verdict == "equivalent"
+	res.Checks["E2_post"] = rep2After.Verdict
 
 	// check etalon
-	repRef, err := r.Check(ctx, e1, referenceDSN)
+	rep1After, err := r.Check(ctx, e1, eRef.ConnectionString)
 	if err != nil {
-		return res, fmt.Errorf("check ref: %w", err)
+		return res, err
 	}
-	res.RefReport = repRef.Verdict
+	res.Checks["E1_post"] = rep1After.Verdict
 
+	if rep2After.Verdict == "equivalent" {
+		res.Verdict = "admitted"
+	} else {
+		res.Verdict = "correctness_failure"
+	}
 	return res, nil
 }

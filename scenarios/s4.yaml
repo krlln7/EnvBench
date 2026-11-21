@@ -10,6 +10,8 @@ config:
   mode: cold
   isolation: shared_kernel
   timeout_s: 120
-s4:
-  mutation_sql: "CREATE TABLE _bench_marker(id int); INSERT INTO _bench_marker VALUES (1);"
+scenario:
+  name: "s4"
+  params:
+    mutation_sql: "CREATE TABLE _bench_marker(id int); INSERT INTO _bench_marker VALUES (1);"
 repeats: 1

@@ -1,4 +1,3 @@
-// internal/adapter/registry.go
 package adapter
 
 import (
